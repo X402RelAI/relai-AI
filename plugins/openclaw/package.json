@@ -1,6 +1,6 @@
 {
   "name": "@relai-fi/plugin-openclaw",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "OpenClaw plugin for RelAI marketplace — x402 paid API calls",
   "keywords": [
     "openclaw",

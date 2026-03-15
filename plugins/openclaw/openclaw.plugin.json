@@ -1,8 +1,8 @@
 {
-  "id": "relai",
+  "id": "plugin-openclaw",
   "name": "RelAI Marketplace",
   "description": "Browse and call paid APIs on the RelAI marketplace. Agent key setup, API discovery, and metered API calls with automatic x402 payment.",
-  "version": "0.3.0",
+  "version": "0.1.2",
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

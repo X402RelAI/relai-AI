@@ -1,5 +1,3 @@
-import { execFile } from "node:child_process";
-import { readFileSync } from "node:fs";
 import { Type } from "@sinclair/typebox";
 import type { OpenClawPluginApi, OpenClawPluginToolContext } from "openclaw/plugin-sdk";
 import {
@@ -21,30 +19,6 @@ import {
   updateSetupStatus,
 } from "./store.js";
 import type { RelaiPluginConfig } from "./config.js";
-
-let _isWSL: boolean | undefined;
-function isWSL(): boolean {
-  if (_isWSL === undefined) {
-    try {
-      _isWSL = readFileSync("/proc/version", "utf-8").toLowerCase().includes("microsoft");
-    } catch {
-      _isWSL = false;
-    }
-  }
-  return _isWSL;
-}
-
-function openUrl(url: string): void {
-  if (isWSL()) {
-    execFile("cmd.exe", ["/c", "start", url.replace(/&/g, "^&")], () => {});
-  } else if (process.platform === "darwin") {
-    execFile("open", [url], () => {});
-  } else if (process.platform === "win32") {
-    execFile("cmd", ["/c", "start", url.replace(/&/g, "^&")], () => {});
-  } else {
-    execFile("xdg-open", [url], () => {});
-  }
-}
 
 function getAgentIdFromCtx(ctx: OpenClawPluginToolContext): string {
   return ctx.agentId || "main";
@@ -138,76 +112,65 @@ export function createSetupTool(_api: OpenClawPluginApi, config: RelaiPluginConf
           );
         }
 
-        // Open consent URL in the user's browser
-        openUrl(authUrl!);
+        // Check if consent was already approved (e.g. user re-calls after approving)
+        const currentStatus = await consentStatus(config, token!);
 
-        // Poll for approval (5s interval, up to 5 min)
-        const POLL_INTERVAL_MS = 5_000;
-        const MAX_POLL_MS = 5 * 60 * 1000;
-        const pollStart = Date.now();
+        if (currentStatus.status === "approved" && currentStatus.retrieveNonce) {
+          const signature = await signMessage(ctxAgentId, currentStatus.retrieveNonce);
+          const retrieved = await consentRetrieve(config, token!, signature);
+          completeSetup(ctxAgentId, retrieved.key, retrieved.agentId);
 
-        while (Date.now() - pollStart < MAX_POLL_MS) {
-          const statusRes = await consentStatus(config, token!);
-
-          if (statusRes.status === "approved" && statusRes.retrieveNonce) {
-            const signature = await signMessage(ctxAgentId, statusRes.retrieveNonce);
-            const retrieved = await consentRetrieve(config, token!, signature);
-            completeSetup(ctxAgentId, retrieved.key, retrieved.agentId);
-
-            return {
-              content: [
-                {
-                  type: "text" as const,
-                  text: `Agent "${ctxAgentId}" is now configured. Service key stored (works on all chains). You can now use relai_call to call paid APIs.`,
-                },
-              ],
-              details: {
-                status: "configured",
-                agentId: ctxAgentId,
-                chainType,
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `Agent "${ctxAgentId}" is now configured. Service key stored (works on all chains). You can now use relai_call to call paid APIs.`,
               },
-            };
-          }
-
-          if (statusRes.status === "rejected") {
-            updateSetupStatus(ctxAgentId, "rejected");
-            return {
-              content: [
-                {
-                  type: "text" as const,
-                  text: `Consent was rejected for agent "${ctxAgentId}". Call relai_setup again to start a new consent flow.`,
-                },
-              ],
-              details: { status: "rejected", agentId: ctxAgentId },
-            };
-          }
-
-          if (statusRes.status === "expired") {
-            updateSetupStatus(ctxAgentId, "expired");
-            return {
-              content: [
-                {
-                  type: "text" as const,
-                  text: `Consent link expired for agent "${ctxAgentId}". Call relai_setup again to get a new link.`,
-                },
-              ],
-              details: { status: "expired", agentId: ctxAgentId },
-            };
-          }
-
-          await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+            ],
+            details: {
+              status: "configured",
+              agentId: ctxAgentId,
+              chainType,
+            },
+          };
         }
 
-        // Polling timed out
+        if (currentStatus.status === "rejected") {
+          updateSetupStatus(ctxAgentId, "rejected");
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `Consent was rejected for agent "${ctxAgentId}". Call relai_setup again to start a new consent flow.`,
+              },
+            ],
+            details: { status: "rejected", agentId: ctxAgentId },
+          };
+        }
+
+        if (currentStatus.status === "expired") {
+          updateSetupStatus(ctxAgentId, "expired");
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: `Consent link expired for agent "${ctxAgentId}". Call relai_setup again to get a new link.`,
+              },
+            ],
+            details: { status: "expired", agentId: ctxAgentId },
+          };
+        }
+
+        // Consent is still pending — return the URL for the user to open
         return {
           content: [
             {
               type: "text" as const,
-              text: `Timed out waiting for approval for agent "${ctxAgentId}". Call relai_setup to try again.`,
+              text: `Please open this link to approve the agent key for "${ctxAgentId}":\n\n${authUrl}\n\nOnce approved, call relai_setup again to complete the configuration.`,
             },
           ],
           details: {
-            status: "timeout",
+            status: "awaiting_consent",
             agentId: ctxAgentId,
             authorizeUrl: authUrl,
           },

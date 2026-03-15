@@ -22,7 +22,7 @@ In your OpenClaw gateway config:
 {
   plugins: {
     entries: {
-      "relai": {
+      "plugin-openclaw": {
         enabled: true,
         config: {
           baseUrl: "https://api.relai.fi",   // RelAI platform URL
@@ -91,6 +91,47 @@ Parameters:
 - `endpointPath` — Endpoint path (e.g. `"/v1/health"`)
 - `method` — HTTP method (default: `GET`)
 - `body` — JSON request body for POST/PUT requests (optional)
+
+## Example prompts
+
+### 1. Setup the agent wallet
+
+```
+> Set up my RelAI agent key on Solana
+```
+
+The agent will generate a keypair and return a consent link. Open it in your browser, approve, then say:
+
+```
+> Check if my RelAI setup is complete
+```
+
+### 2. Discover available APIs
+
+```
+> What paid APIs are available on RelAI?
+> Show me APIs available on the Solana network
+```
+
+### 3. Get API details and pricing
+
+```
+> How much does the nshield API cost per call?
+> Show me all endpoints for the nshield API
+```
+
+### 4. Call a paid API
+
+```
+> Use the nshield API to check /v1/health
+> Call the nshield API endpoint /v1/scan with POST body {"url": "https://example.com"}
+```
+
+### 5. Full workflow
+
+```
+> Set up RelAI, find an API that does security scanning, and run a health check on it
+```
 
 ## How it works
 

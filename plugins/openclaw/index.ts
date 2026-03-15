@@ -8,7 +8,7 @@ import {
 import { relaiConfigSchema, parseConfig } from "./src/config.js";
 
 const plugin = {
-  id: "relai",
+  id: "plugin-openclaw",
   name: "RelAI Marketplace",
   description:
     "Browse and call paid APIs on the RelAI marketplace. Handles agent key setup, API discovery, and metered API calls.",
