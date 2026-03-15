@@ -1,0 +1,49 @@
+{
+  "name": "@relai-fi/plugin-openclaw",
+  "version": "0.1.0",
+  "description": "OpenClaw plugin for RelAI marketplace — x402 paid API calls",
+  "keywords": [
+    "openclaw",
+    "relai",
+    "x402",
+    "micropayments",
+    "plugin"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/X402RelAI/relai-AI.git",
+    "directory": "plugins/openclaw"
+  },
+  "author": "X402RelAI",
+  "homepage": "https://github.com/X402RelAI/relai-AI/tree/main/plugins/openclaw",
+  "bugs": {
+    "url": "https://github.com/X402RelAI/relai-AI/issues"
+  },
+  "license": "MIT",
+  "type": "module",
+  "main": "./index.ts",
+  "files": [
+    "index.ts",
+    "src/",
+    "openclaw.plugin.json",
+    "README.md"
+  ],
+  "dependencies": {
+    "@sinclair/typebox": "0.34.48",
+    "@solana/web3.js": "^1.98.4",
+    "ethers": "^6.16.0",
+    "tweetnacl": "^1.0.3",
+    "zod": "3.25.76"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.1.26"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.5"
+  }
+}
