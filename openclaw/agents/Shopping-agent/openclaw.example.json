@@ -1,0 +1,25 @@
+{
+  "agents": {
+    "defaults": {
+      "workspace": "~/.openclaw/workspace"
+    },
+    "list": [
+      {
+        "id": "relai",
+        "workspace": "~/.openclaw/workspace-relai",
+        "model": "anthropic/claude-sonnet-4-6"
+      }
+    ]
+  },
+  "plugins": {
+    "entries": {
+      "plugin-openclaw": {
+        "enabled": true,
+        "config": {
+          "baseUrl": "https://api.relai.fi",
+          "requestTimeoutMs": 15000
+        }
+      }
+    }
+  }
+}

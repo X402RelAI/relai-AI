@@ -1,6 +1,6 @@
 {
   "name": "@relai-fi/plugin-openclaw",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "OpenClaw plugin for RelAI marketplace — x402 paid API calls",
   "keywords": [
     "openclaw",
@@ -31,9 +31,9 @@
   "dependencies": {
     "@sinclair/typebox": "0.34.48",
     "@solana/web3.js": "^1.98.4",
+    "bs58": "^6.0.0",
     "ethers": "^6.16.0",
-    "tweetnacl": "^1.0.3",
-    "zod": "3.25.76"
+    "tweetnacl": "^1.0.3"
   },
   "peerDependencies": {
     "openclaw": ">=2026.1.26"
@@ -41,7 +41,15 @@
   "openclaw": {
     "extensions": [
       "./index.ts"
-    ]
+    ],
+    "compat": {
+      "pluginApi": ">=2026.3.24-beta.2",
+      "minGatewayVersion": "2026.3.24-beta.2"
+    },
+    "build": {
+      "openclawVersion": "2026.3.24-beta.2",
+      "pluginSdkVersion": "2026.3.24-beta.2"
+    }
   },
   "devDependencies": {
     "@types/node": "^25.3.5"

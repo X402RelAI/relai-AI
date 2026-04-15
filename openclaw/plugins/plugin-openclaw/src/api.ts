@@ -60,6 +60,7 @@ export interface ApiEndpoint {
   path: string;
   method: string;
   summary: string;
+  description: string | null;
   usdPrice: number;
   enabled: boolean;
 }
@@ -69,8 +70,11 @@ export interface ApiDetails {
   name: string;
   description: string;
   network: string;
+  /** When set, calls are routed to `https://{subdomain}.{x402Domain}{path}` instead of the relay URL. */
+  subdomain?: string | null;
   zAuthEnabled: boolean;
   endpoints: ApiEndpoint[];
+  openApiJson?: Record<string, unknown>;
 }
 
 export async function listApis(config: RelaiPluginConfig): Promise<MarketplaceApi[]> {
@@ -155,6 +159,17 @@ export async function consentRetrieve(
 // Metered API calls (authenticated via service key)
 // ============================================================================
 
+/**
+ * Execute a paid call.
+ *
+ * Routing:
+ * 1. If the API record has a `subdomain`, the primary URL is `https://{subdomain}.{x402Domain}{endpointPath}`.
+ * 2. On network failure or 5xx from the primary URL, retry on the relay URL
+ *    `{baseUrl}/relay/{apiId}{endpointPath}`.
+ * 3. If no `subdomain`, the relay URL is used directly.
+ *
+ * `subdomain` is auto-resolved via `getApiDetails(apiId)` unless supplied by the caller.
+ */
 export async function meteredCall(
   config: RelaiPluginConfig,
   serviceKey: string,
@@ -163,30 +178,58 @@ export async function meteredCall(
   endpointPath: string,
   method: string,
   body?: string,
+  subdomain?: string | null,
 ): Promise<{ status: number; body: string }> {
-  const url = `${config.baseUrl}/relay/${encodeURIComponent(apiId)}${endpointPath}`;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), config.requestTimeoutMs);
+  const resolvedSubdomain =
+    subdomain !== undefined ? subdomain : await resolveSubdomain(config, apiId);
+
+  const relayUrl = `${config.baseUrl}/relay/${encodeURIComponent(apiId)}${endpointPath}`;
+  const primaryUrl = resolvedSubdomain
+    ? `https://${resolvedSubdomain}.${config.x402Domain}${endpointPath}`
+    : null;
+
+  const headers = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+    "X-Service-Key": serviceKey,
+    "X-Agent-ID": agentId,
+  };
+
+  const attempt = async (url: string) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), config.requestTimeoutMs);
+    try {
+      const init: RequestInit = { method, headers, signal: controller.signal };
+      if (body && method !== "GET" && method !== "HEAD") init.body = body;
+      const res = await fetch(url, init);
+      const text = await res.text();
+      return { status: res.status, body: text };
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
+
+  if (!primaryUrl) return attempt(relayUrl);
 
   try {
-    const init: RequestInit = {
-      method,
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        "X-Service-Key": serviceKey,
-        "X-Agent-ID": agentId,
-      },
-      signal: controller.signal,
-    };
-    if (body && method !== "GET" && method !== "HEAD") {
-      init.body = body;
-    }
+    const result = await attempt(primaryUrl);
+    // Fall back on server-side failures only — client errors (4xx) are authoritative.
+    if (result.status >= 500) return attempt(relayUrl);
+    return result;
+  } catch {
+    // Network / DNS / timeout on the subdomain → fall back.
+    return attempt(relayUrl);
+  }
+}
 
-    const res = await fetch(url, init);
-    const text = await res.text();
-    return { status: res.status, body: text };
-  } finally {
-    clearTimeout(timeout);
+async function resolveSubdomain(
+  config: RelaiPluginConfig,
+  apiId: string,
+): Promise<string | null> {
+  try {
+    const details = await getApiDetails(config, apiId);
+    return details.subdomain ?? null;
+  } catch {
+    return null;
   }
 }

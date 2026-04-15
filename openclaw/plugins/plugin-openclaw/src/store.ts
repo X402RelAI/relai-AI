@@ -3,10 +3,6 @@ import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
 import { ethers } from "ethers";
-import { Keypair } from "@solana/web3.js";
-import nacl from "tweetnacl";
-
-export type ChainType = "evm" | "solana";
 
 export type SetupStatus =
   | "uninitialized"
@@ -16,13 +12,24 @@ export type SetupStatus =
   | "rejected"
   | "expired";
 
-export type AgentKeyData = {
-  // Chain type
-  chainType: ChainType;
+/**
+ * Legacy field — older plugin versions stored a `chainType` ("evm" | "solana")
+ * and generated Solana keypairs for consent signing. The consent/retrieve
+ * endpoint is EVM-only (EIP-191), so Solana pairing keypairs never actually
+ * authenticated. The field is kept in the stored type for backward compat
+ * with existing `~/.openclaw/relai/agent-keys.json` files, but new records
+ * no longer set it and new keypairs are always EVM.
+ */
+export type LegacyChainType = "evm" | "solana";
 
-  // Local keypair (generated automatically)
-  privateKey: string; // EVM: hex private key, Solana: base64-encoded 64-byte secret key
-  agentPubKey: string; // EVM: address, Solana: base58 public key
+export type AgentKeyData = {
+  // Legacy — see LegacyChainType above. Undefined on new records.
+  chainType?: LegacyChainType;
+
+  // Local EVM pairing keypair (generated automatically at setup).
+  // Used once to sign the consent retrieve nonce; unused after that.
+  privateKey: string; // 0x-prefixed hex (secp256k1)
+  agentPubKey: string; // EVM address (0x…)
 
   // Agent metadata
   agentId?: string;
@@ -90,11 +97,7 @@ function saveStore(store: KeyStore): void {
 
 export function getAgentKey(agentId: string): AgentKeyData | null {
   const store = loadStore();
-  const entry = store.agents[agentId] ?? null;
-  if (entry && !entry.chainType) {
-    entry.chainType = "evm";
-  }
-  return entry;
+  return store.agents[agentId] ?? null;
 }
 
 export function isAgentConfigured(agentId: string): boolean {
@@ -108,12 +111,14 @@ export function getServiceKey(agentId: string): string | null {
 }
 
 /**
- * Get or create a local keypair for this agent.
- * Generates an EVM wallet or Solana keypair based on chainType.
+ * Get or create a local EVM pairing keypair for this agent.
+ *
+ * The service key resulting from the consent flow is chain-agnostic — it
+ * works on every chain RelAI supports. The pairing keypair is only used once,
+ * to sign the retrieve nonce; no notion of chain applies at this stage.
  */
 export function getOrCreateAgent(
   agentId: string,
-  chainType: ChainType,
   opts?: {
     agentName?: string;
     contractAddress?: string;
@@ -125,7 +130,6 @@ export function getOrCreateAgent(
 
   if (store.agents[agentId]) {
     const existing = store.agents[agentId];
-    if (!existing.chainType) existing.chainType = "evm";
     if (opts) {
       store.agents[agentId] = {
         ...existing,
@@ -139,24 +143,14 @@ export function getOrCreateAgent(
     return store.agents[agentId];
   }
 
-  let privateKey: string;
-  let agentPubKey: string;
-
-  if (chainType === "solana") {
-    const keypair = Keypair.generate();
-    privateKey = Buffer.from(keypair.secretKey).toString("base64");
-    agentPubKey = keypair.publicKey.toBase58();
-  } else {
-    const wallet = ethers.Wallet.createRandom();
-    privateKey = wallet.privateKey;
-    agentPubKey = wallet.address;
-  }
+  const wallet = ethers.Wallet.createRandom();
+  const privateKey = wallet.privateKey;
+  const agentPubKey = wallet.address;
 
   const derivedAgentId = opts?.nftTokenId
     || `openclaw-agent-${crypto.createHash("sha256").update(agentPubKey).digest("hex").slice(0, 8)}`;
 
   const data: AgentKeyData = {
-    chainType,
     privateKey,
     agentPubKey,
     agentId: derivedAgentId,
@@ -172,8 +166,7 @@ export function getOrCreateAgent(
 }
 
 /**
- * Sign a message with the agent's local private key.
- * Supports both EVM (ethers) and Solana (tweetnacl) signing.
+ * Sign a message with the agent's pairing keypair (always EVM / EIP-191).
  */
 export async function signMessage(agentId: string, message: string): Promise<string> {
   const data = getAgentKey(agentId);
@@ -182,14 +175,18 @@ export async function signMessage(agentId: string, message: string): Promise<str
   }
 
   if (data.chainType === "solana") {
-    const secretKey = Buffer.from(data.privateKey, "base64");
-    const msgBytes = new TextEncoder().encode(message);
-    const sigBytes = nacl.sign.detached(msgBytes, secretKey);
-    return Buffer.from(sigBytes).toString("base64");
-  } else {
-    const wallet = new ethers.Wallet(data.privateKey);
-    return wallet.signMessage(message);
+    // Legacy Solana keypair — cannot authenticate against the EVM-only
+    // consent/retrieve endpoint. Force a reset so the user regenerates an
+    // EVM pairing keypair via relai_setup.
+    throw new Error(
+      `Agent "${agentId}" has a legacy Solana pairing keypair that cannot authenticate ` +
+      `against the RelAI consent/retrieve endpoint. Delete the entry from ` +
+      `~/.openclaw/relai/agent-keys.json and re-run relai_setup.`,
+    );
   }
+
+  const wallet = new ethers.Wallet(data.privateKey);
+  return wallet.signMessage(message);
 }
 
 export function updateConsentPending(

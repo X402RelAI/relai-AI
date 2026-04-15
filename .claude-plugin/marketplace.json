@@ -1,0 +1,25 @@
+{
+  "name": "relai-ai",
+  "owner": {
+    "name": "X402RelAI",
+    "email": "contact@relai.fi"
+  },
+  "metadata": {
+    "description": "RelAI skills for Claude Code — discover and call paid APIs (x402 micropayments), publish monetised APIs, quote bridge liquidity.",
+    "version": "0.1.0"
+  },
+  "plugins": [
+    {
+      "name": "relai-skills",
+      "description": "Consume and publish paid APIs on the RelAI marketplace over HTTP.",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./.claude/skills/relai-setup",
+        "./.claude/skills/relai-marketplace-buy",
+        "./.claude/skills/relai-api-publish",
+        "./.claude/skills/relai-bridge-usdc"
+      ]
+    }
+  ]
+}

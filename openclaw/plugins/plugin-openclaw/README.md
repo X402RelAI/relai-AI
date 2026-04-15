@@ -26,8 +26,8 @@ In your OpenClaw gateway config:
         enabled: true,
         config: {
           baseUrl: "https://api.relai.fi",   // RelAI platform URL
-          requestTimeoutMs: 15000,            // HTTP timeout (default: 15000)
-          chainType: "evm"                    // "evm" or "solana" (default: "evm")
+          x402Domain: "x402.fi",              // Subdomain root for paid-call routing
+          requestTimeoutMs: 15000             // HTTP timeout (default: 15000)
         }
       }
     }
@@ -43,7 +43,7 @@ The plugin registers 4 tools:
 
 ### `relai_setup`
 
-Set up an agent key for this agent. Generates a local keypair (EVM or Solana), opens a consent URL in the browser, and polls for approval automatically.
+Set up an agent key for this agent. Generates a local EVM pairing keypair, opens a consent URL in the browser, and polls for approval automatically. The resulting service key is chain-agnostic — it works on all chains RelAI supports.
 
 ```
 > Set up my RelAI agent key
@@ -51,7 +51,6 @@ Set up an agent key for this agent. Generates a local keypair (EVM or Solana), o
 
 Parameters:
 - `agentName` — Human-readable name shown in consent UI
-- `chainType` — `"evm"` or `"solana"` (defaults to plugin config)
 - `contractAddress` — ERC-721 agent NFT contract address (optional)
 - `nftTokenId` — Agent NFT token ID (optional)
 - `network` — Network name, e.g. `"skale-base"` (optional)
