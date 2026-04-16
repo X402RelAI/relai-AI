@@ -22,11 +22,36 @@ import {
   type ToolCtx,
 } from "./shared.js";
 
+const ParameterSchema = Type.Object({
+  name: Type.String(),
+  in: Type.Union([
+    Type.Literal("query"),
+    Type.Literal("path"),
+    Type.Literal("header"),
+  ]),
+  required: Type.Optional(Type.Boolean()),
+  description: Type.Optional(Type.String()),
+  schema: Type.Optional(Type.Any()),
+});
+
 const EndpointSchema = Type.Object({
   path: Type.String(),
   method: Type.String(),
   usdPrice: Type.Number(),
   enabled: Type.Optional(Type.Boolean()),
+  description: Type.Optional(Type.String()),
+  parameters: Type.Optional(
+    Type.Array(ParameterSchema, {
+      description:
+        "OpenAPI Parameter Objects (query / path / header) shown on the marketplace test form.",
+    }),
+  ),
+  requestBody: Type.Optional(
+    Type.Any({
+      description:
+        "OpenAPI-style request body. Full shape ({ content: { 'application/json': { schema } } }) or simplified shape ({ required: [...], properties: {...} }) both accepted.",
+    }),
+  ),
 });
 
 // ---------------------------------------------------------------------------
@@ -54,6 +79,12 @@ export function createMgmtCreateApiTool(config: RelaiPluginConfig) {
       ),
       endpoints: Type.Optional(
         Type.Array(EndpointSchema, { description: "Initial priced endpoints." }),
+      ),
+      openApi: Type.Optional(
+        Type.Any({
+          description:
+            "Optional full OpenAPI 3.x spec (object or JSON string). When provided, the marketplace renders full schemas and, if 'endpoints' is omitted, endpoints are derived from its paths with a default price.",
+        }),
       ),
     }),
 

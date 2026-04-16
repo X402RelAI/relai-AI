@@ -57,7 +57,18 @@ Optional:
 - `description`, `websiteUrl`, `logoUrl`
 - `solanaWallet` — cross-chain receiver when `network` is an EVM chain
 - `evmCrossChainWallet` — cross-chain receiver when `network` is `solana`
-- `endpoints[]` — initial priced endpoints, each `{ path, method, usdPrice, enabled? }`
+- `endpoints[]` — initial priced endpoints, each `{ path, method, usdPrice, enabled?, description?, parameters?, requestBody? }`
+- `openApi` — full OpenAPI 3.x spec (object or JSON string). When supplied, the marketplace test form renders full schemas. If `endpoints` is omitted, endpoints are derived from the spec's paths with a default price.
+
+### Endpoint schemas (strongly recommended)
+
+Without schema info the marketplace test tab can't render query fields or body inputs — buyers won't be able to try the endpoint. Provide **one** of:
+
+- Per-endpoint `parameters` — OpenAPI Parameter Objects (`{ name, in: 'query'|'path'|'header', required?, description?, schema? }`).
+- Per-endpoint `requestBody` — full OpenAPI shape `{ content: { 'application/json': { schema } } }` or simplified inner-schema shape `{ required: [...], properties: {...} }` (server normalises both to a valid OpenAPI fragment).
+- Top-level `openApi` — covers both.
+
+See [references/payloads.md](references/payloads.md) for worked payload examples.
 
 ### 2. POST `/v1/apis`
 
@@ -99,6 +110,7 @@ DELETE `/v1/apis/{apiId}` is **irreversible**. Confirm with the user before call
 - **Verify `baseUrl` reachability** before creating — broken upstream produces 5xx metered calls that still count.
 - **Price sanity** — USDC decimals. `0.5` vs `0.05` is a 10× error. Read the value back to the user.
 - **Network/wallet match** — don't set `network: solana` with an EVM `0x…` wallet or vice versa.
+- **Empty schema UX** — if neither `parameters`/`requestBody` per endpoint nor a top-level `openApi` is provided, the marketplace test form will show no inputs and buyers can't try the endpoint. Treat schemas as a ship requirement, not optional.
 - **Redact the service key** from everything user-visible.
 
 ## References

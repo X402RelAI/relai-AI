@@ -18,10 +18,87 @@ All paths are relative to `RELAI_API_URL` (default `https://api.relai.fi`). Auth
   "solanaWallet": "optional — for EVM-network APIs accepting Solana payments",
   "evmCrossChainWallet": "optional — for Solana-network APIs accepting EVM payments",
   "endpoints": [
-    { "path": "/v1/predict", "method": "post", "usdPrice": 0.05, "enabled": true }
+    {
+      "path": "/v1/predict",
+      "method": "post",
+      "usdPrice": 0.05,
+      "enabled": true,
+      "description": "Run inference on a user prompt",
+      "requestBody": {
+        "required": ["prompt"],
+        "properties": {
+          "prompt": { "type": "string" },
+          "temperature": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    }
   ]
 }
 ```
+
+### Endpoint schemas (recommended)
+
+Provide schema info so the marketplace test form can render query fields or body inputs. Three options — any one is enough:
+
+**Per-endpoint `parameters`** (query / path / header):
+
+```json
+{
+  "path": "/v1/search",
+  "method": "get",
+  "usdPrice": 0.01,
+  "parameters": [
+    { "name": "q", "in": "query", "required": true, "description": "Search query" },
+    { "name": "limit", "in": "query", "schema": { "type": "integer" } }
+  ]
+}
+```
+
+- `in` — one of `query`, `path`, `header`. Path params can also be declared via `{placeholder}` in `path`.
+- Path params are forced to `required: true` server-side (OpenAPI rule).
+
+**Per-endpoint `requestBody`** — accepts either the simplified JSON Schema shape:
+
+```json
+"requestBody": {
+  "required": ["prompt"],
+  "properties": {
+    "prompt": { "type": "string" }
+  }
+}
+```
+
+or the full OpenAPI shape:
+
+```json
+"requestBody": {
+  "required": true,
+  "content": {
+    "application/json": {
+      "schema": {
+        "required": ["prompt"],
+        "properties": { "prompt": { "type": "string" } }
+      }
+    }
+  }
+}
+```
+
+The server normalises both to a valid OpenAPI 3.x Request Body Object before persisting.
+
+**Top-level `openApi`** — pass a full OpenAPI 3.x document instead (object or JSON string):
+
+```json
+{
+  "name": "My ML API",
+  "baseUrl": "https://inference.example.com",
+  "merchantWallet": "0xabc...",
+  "network": "base",
+  "openApi": { "openapi": "3.0.0", "info": {...}, "paths": {...} }
+}
+```
+
+If `endpoints` is omitted, endpoints are auto-derived from the spec's `paths` with a default price of `$0.01`. Override later via `PUT /v1/apis/{apiId}/pricing`.
 
 **Response** `200 OK`: the full record including `apiId`, `status`, timestamps.
 
@@ -80,12 +157,23 @@ All paths are relative to `RELAI_API_URL` (default `https://api.relai.fi`). Auth
 ```json
 {
   "endpoints": [
-    { "path": "/v1/predict", "method": "post", "usdPrice": 0.05, "enabled": true }
+    {
+      "path": "/v1/predict",
+      "method": "post",
+      "usdPrice": 0.05,
+      "enabled": true,
+      "description": "Run inference on a user prompt",
+      "parameters": [],
+      "requestBody": {
+        "required": ["prompt"],
+        "properties": { "prompt": { "type": "string" } }
+      }
+    }
   ]
 }
 ```
 
-Send the complete list — the server replaces the existing pricing wholesale.
+Send the complete list — the server replaces the existing pricing wholesale. `parameters` and `requestBody` use the same shapes as on `POST /v1/apis` above; omitting them on an update wipes any previously stored schema for that endpoint.
 
 **Response**: `{ "success": true, "apiId": "...", "updated": 1 }`.
 
@@ -158,3 +246,4 @@ Same query params as payments.
 - `usdPrice` — decimal USDC. `0` disables metering.
 - `enabled` — defaults to `true` when omitted.
 - Paths are matched exactly: `/users` ≠ `/users/`.
+- `parameters[]` and `requestBody` — OpenAPI 3.x shapes; see the create-flow section for examples. Path params can also be declared inline via `{placeholder}` in `path`.

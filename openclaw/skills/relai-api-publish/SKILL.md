@@ -28,7 +28,18 @@ Optional but commonly needed:
 - `description`, `websiteUrl`, `logoUrl`
 - `solanaWallet` — cross-chain receiver when `network` is an EVM chain
 - `evmCrossChainWallet` — cross-chain receiver when `network` is `solana`
-- `endpoints[]` — initial priced endpoints; each `{path, method, usdPrice, enabled?}`
+- `endpoints[]` — initial priced endpoints; each `{ path, method, usdPrice, enabled?, description?, parameters?, requestBody? }`
+- `openApi` — full OpenAPI 3.x spec (object or JSON string). When supplied, the marketplace test form renders full schemas. If `endpoints` is omitted, endpoints are derived from its paths with a default price (still overridable later via `relai_mgmt_set_pricing`).
+
+### Endpoint schemas (strongly recommended)
+
+Without schema info the marketplace test tab can't render query fields or body inputs — buyers won't be able to try the endpoint. Provide **one** of the following:
+
+- Per-endpoint `parameters` — OpenAPI Parameter Objects. Each `{ name, in: 'query'|'path'|'header', required?, description?, schema? }`.
+- Per-endpoint `requestBody` — OpenAPI-style body. Full shape `{ content: { 'application/json': { schema } } }` **or** simplified inner-schema shape `{ required: [...], properties: {...} }` (server normalises to a valid OpenAPI fragment).
+- Top-level `openApi` — bypasses the need for per-endpoint schemas.
+
+See [references/endpoint-pricing.md](references/endpoint-pricing.md) for worked examples.
 
 ### 2. Call `relai_mgmt_create_api`
 
@@ -72,6 +83,7 @@ For time-bounded queries use `from` (ISO8601). For pagination, pass the `nextCur
 - **Verify `baseUrl` reachability** before creating — a broken upstream produces 502s that still count as failed metered calls.
 - **Price sanity**: RelAI prices are USDC. A misplaced decimal (0.5 vs 0.05) is a 10× pricing error. Read the value back to the user before confirming.
 - **Network mismatch**: `network` must match where `merchantWallet` lives. Do not set `network: solana` with an EVM `0x…` wallet.
+- **Empty schema UX**: if neither `parameters`/`requestBody` per endpoint nor a top-level `openApi` is provided, the marketplace test form will show no inputs — buyers can't test the endpoint and conversions drop. Treat schemas as a ship requirement, not optional.
 
 ## References
 
