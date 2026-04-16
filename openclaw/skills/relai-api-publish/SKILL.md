@@ -28,8 +28,8 @@ Optional but commonly needed:
 - `description`, `websiteUrl`, `logoUrl`
 - `solanaWallet` — cross-chain receiver when `network` is an EVM chain
 - `evmCrossChainWallet` — cross-chain receiver when `network` is `solana`
-- `facilitator` — settlement facilitator (see the matrix below). Defaults to the first supported on `network`.
-- `x402Version` — `1` or `2`. Defaults to the newest version the `(facilitator, network)` pair supports.
+- `facilitator` — settlement facilitator (see the matrix below). Defaults to `relai` whenever the network supports it.
+- `x402Version` — `1` or `2`. Defaults to `2` whenever the `(facilitator, network)` pair supports v2 (falls back to v1 for v1-only pairs like `thirdweb` on ethereum).
 - `endpoints[]` — initial priced endpoints; each `{ path, method, usdPrice, enabled?, description?, parameters?, requestBody? }`
 - `openApi` — full OpenAPI 3.x spec (object or JSON string). When supplied, the marketplace test form renders full schemas. If `endpoints` is omitted, endpoints are derived from its paths with a default price (still overridable later via `relai_mgmt_set_pricing`).
 
@@ -48,8 +48,9 @@ Optional but commonly needed:
 | `custom` | most networks | v1 & v2 |
 
 **Defaults**:
-- `solana`, `base`, `peaq`, `sei` → `payai`
-- `skale-base`, `skale-base-sepolia`, `avalanche`, `ethereum`, `telos`, `polygon` → `relai`
+- Any network where `relai` appears in the matrix above → `relai` + `v2`
+- `peaq`, `sei` (no `relai` support) → `payai` + `v1`
+- `ethereum` with `facilitator: 'thirdweb'` → `v1` (only version supported)
 
 If you pass an unsupported `(facilitator, network, x402Version)` triple the server returns `400` — don't guess, look up the matrix above or omit both fields and let the server pick the default.
 

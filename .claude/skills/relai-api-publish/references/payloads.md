@@ -104,8 +104,8 @@ If `endpoints` is omitted, endpoints are auto-derived from the spec's `paths` wi
 
 ### Facilitator & x402Version (optional)
 
-- `facilitator` — one of `payai`, `dexter`, `openfacilitator`, `relai`, `autoincentive`, `stratum`, `thirdweb`, `0xgasless`, `custom`. Defaults to the first supported on `network`.
-- `x402Version` — `1` or `2`. Defaults to the newest version the `(facilitator, network)` pair supports.
+- `facilitator` — one of `payai`, `dexter`, `openfacilitator`, `relai`, `autoincentive`, `stratum`, `thirdweb`, `0xgasless`, `custom`. Defaults to `relai` whenever the network supports it (all networks except `peaq` and `sei`).
+- `x402Version` — `1` or `2`. Defaults to `2` whenever the `(facilitator, network)` pair supports v2 (v1-only pairs like `thirdweb` on ethereum fall back to v1).
 
 Support matrix:
 
