@@ -12,6 +12,8 @@ All paths are relative to `RELAI_API_URL` (default `https://api.relai.fi`). Auth
   "baseUrl": "https://inference.example.com",
   "merchantWallet": "0xabc...",
   "network": "base",
+  "facilitator": "payai",
+  "x402Version": 2,
   "description": "optional",
   "websiteUrl": "optional",
   "logoUrl": "optional",
@@ -99,6 +101,27 @@ The server normalises both to a valid OpenAPI 3.x Request Body Object before per
 ```
 
 If `endpoints` is omitted, endpoints are auto-derived from the spec's `paths` with a default price of `$0.01`. Override later via `PUT /v1/apis/{apiId}/pricing`.
+
+### Facilitator & x402Version (optional)
+
+- `facilitator` — one of `payai`, `dexter`, `openfacilitator`, `relai`, `autoincentive`, `stratum`, `thirdweb`, `0xgasless`, `custom`. Defaults to the first supported on `network`.
+- `x402Version` — `1` or `2`. Defaults to the newest version the `(facilitator, network)` pair supports.
+
+Support matrix:
+
+| Facilitator | Networks | Versions |
+|---|---|---|
+| `payai` | solana, solana-devnet, base, base-sepolia, peaq, polygon, sei | v1 & v2 (peaq/polygon/sei = v1 only) |
+| `dexter` | solana, base | v2 |
+| `openfacilitator` | solana, base | v2 |
+| `relai` | solana, solana-devnet, base, base-sepolia, skale-base, skale-base-sepolia, avalanche, polygon, ethereum, telos | v2 |
+| `autoincentive` | base, base-sepolia | v2 |
+| `stratum` | solana, base | v2 |
+| `thirdweb` | ethereum | v1 |
+| `0xgasless` | avalanche | v2 |
+| `custom` | most networks | v1 & v2 |
+
+Unsupported `(facilitator, network, x402Version)` triples produce a `400` with the list of valid facilitators for that network.
 
 **Response** `200 OK`: the full record including `apiId`, `status`, timestamps.
 

@@ -57,8 +57,30 @@ Optional:
 - `description`, `websiteUrl`, `logoUrl`
 - `solanaWallet` — cross-chain receiver when `network` is an EVM chain
 - `evmCrossChainWallet` — cross-chain receiver when `network` is `solana`
+- `facilitator` — settlement facilitator (see matrix below). Defaults to the first supported on `network`.
+- `x402Version` — `1` or `2`. Defaults to the newest version the `(facilitator, network)` pair supports.
 - `endpoints[]` — initial priced endpoints, each `{ path, method, usdPrice, enabled?, description?, parameters?, requestBody? }`
 - `openApi` — full OpenAPI 3.x spec (object or JSON string). When supplied, the marketplace test form renders full schemas. If `endpoints` is omitted, endpoints are derived from the spec's paths with a default price.
+
+### Facilitator & x402 version
+
+| Facilitator | Networks | Versions |
+|---|---|---|
+| `payai` | solana, solana-devnet, base, base-sepolia, peaq, polygon, sei | v1 & v2 (peaq/polygon/sei = v1 only) |
+| `dexter` | solana, base | v2 |
+| `openfacilitator` | solana, base | v2 |
+| `relai` | solana, solana-devnet, base, base-sepolia, skale-base, skale-base-sepolia, avalanche, polygon, ethereum, telos | v2 |
+| `autoincentive` | base, base-sepolia | v2 |
+| `stratum` | solana, base | v2 |
+| `thirdweb` | ethereum | v1 |
+| `0xgasless` | avalanche | v2 |
+| `custom` | most networks | v1 & v2 |
+
+**Defaults**:
+- `solana`, `base`, `peaq`, `sei` → `payai`
+- `skale-base`, `skale-base-sepolia`, `avalanche`, `ethereum`, `telos`, `polygon` → `relai`
+
+Unsupported `(facilitator, network, x402Version)` triples return `400` — look up the matrix or omit both fields to let the server pick.
 
 ### Endpoint schemas (strongly recommended)
 

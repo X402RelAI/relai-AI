@@ -68,6 +68,18 @@ export function createMgmtCreateApiTool(config: RelaiPluginConfig) {
       baseUrl: Type.String({ description: "Upstream base URL that RelAI will proxy." }),
       merchantWallet: Type.String({ description: "Primary wallet that receives payments." }),
       network: Type.String({ description: "Network (e.g. 'base', 'solana', 'skale-base')." }),
+      facilitator: Type.Optional(
+        Type.String({
+          description:
+            "Facilitator settling payments (e.g. 'payai', 'dexter', 'openfacilitator', 'relai', 'autoincentive', 'stratum', 'thirdweb', '0xgasless', 'custom'). Defaults to the first supported on the network. Server rejects unsupported (facilitator, network) combos.",
+        }),
+      ),
+      x402Version: Type.Optional(
+        Type.Union([Type.Literal(1), Type.Literal(2)], {
+          description:
+            "x402 protocol version (1 or 2). Defaults to the newest version the (facilitator, network) pair supports.",
+        }),
+      ),
       description: Type.Optional(Type.String()),
       websiteUrl: Type.Optional(Type.String()),
       logoUrl: Type.Optional(Type.String()),
