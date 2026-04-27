@@ -1,0 +1,8 @@
+# Local devnet keypairs — NEVER commit. Each developer generates their own
+# with `solana-keygen new --outfile .buyer-devnet.json` and funds it via the
+# Circle USDC devnet faucet.
+.buyer-devnet.json
+*-devnet.json
+
+# Demo-specific .env (the repo-root .gitignore also covers this)
+.env

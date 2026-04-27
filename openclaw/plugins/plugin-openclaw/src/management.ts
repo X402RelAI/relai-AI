@@ -370,3 +370,119 @@ export function getBridgeQuote(
 export function getBridgeBalances(config: RelaiPluginConfig) {
   return mgmtReq<BridgeBalances>(config, null, "GET", "/v1/bridge/balances");
 }
+
+// ============================================================================
+// Shielded private links — read-only (status / config)
+//
+// The full create + fund + redeem flow involves on-chain wallet ops and
+// local zk-proof generation, which don't belong in this thin HTTP plugin.
+// The endpoints below cover the read-only surface that any agent can use to
+// inspect a shielded link or the pool's state. Service-key-authenticated.
+// ============================================================================
+
+export type ShieldedNetwork = "solana-devnet" | "solana" | "base-sepolia" | "skale-base-sepolia";
+
+export interface ShieldedPoolConfigSolana {
+  shieldedLink: true;
+  nativeSolanaShielded: true;
+  settlementNetwork: string;
+  programId: string;
+  verifierProgramId: string | null;
+  usdcMint: string;
+  rpcUrl: string;
+  issuerFeeBps: number;
+}
+
+export interface ShieldedPoolConfigEvm {
+  shieldedLink: true;
+  settlementNetwork: string;
+  poolAddress: string;
+  contractVersion: string;
+  fundingMode?: string;
+  verifierAddress?: string;
+  poseidonHasherAddress?: string;
+  treeDepth?: number;
+  usdcAddress: string;
+  denomination?: string | null;
+  issuerFeeBps: number;
+  feeRecipient?: string;
+}
+
+export type ShieldedPoolConfig = ShieldedPoolConfigSolana | ShieldedPoolConfigEvm;
+
+export interface ShieldedLinkStatus {
+  shieldedLinkId: string;
+  shieldedLink: true;
+  status: string; // "draft" | "funded" | "redeemed" | "expired" | "cancelled"
+  settlementNetwork: string;
+  value?: number;
+  feeAmount?: number;
+  totalAmount?: number;
+  validBefore?: number;
+  description?: string | null;
+  redeemable?: boolean;
+  contractVersion?: string;
+  poolAddress?: string;
+  // Plus other fields the server returns; kept open so we don't drift.
+  [extra: string]: unknown;
+}
+
+export interface ShieldedAspStatus {
+  enabled: boolean;
+  providers?: Array<{ id: string; freshAt?: string }>;
+  lastSnapshot?: { rootHex?: string; leafCount?: number; publishedAt?: number };
+  // Read-only mirror of `/asp/status`; kept open since the server surface evolves.
+  [extra: string]: unknown;
+}
+
+export function getShieldedPoolConfig(
+  config: RelaiPluginConfig,
+  serviceKey: string,
+  network: ShieldedNetwork,
+) {
+  // Bypass the v1 proxy: in prod it routes Solana to a non-existent facilitator
+  // path and falls through to requireAuth, returning 401. The EVM-facilitator
+  // dispatcher handles both EVM and Solana via the `?network=` query.
+  return mgmtReq<ShieldedPoolConfig>(
+    config,
+    serviceKey,
+    "GET",
+    `/facilitator/payment-codes/shielded-links/config?network=${encodeURIComponent(network)}`,
+  );
+}
+
+function shieldedFacilitatorBaseFor(network: ShieldedNetwork): string {
+  if (network === "solana" || network === "solana-devnet") {
+    return "/facilitator/solana-payment-codes";
+  }
+  return "/facilitator/payment-codes";
+}
+
+export function getShieldedLinkStatus(
+  config: RelaiPluginConfig,
+  serviceKey: string,
+  linkId: string,
+  network: ShieldedNetwork,
+) {
+  // Same v1-proxy bypass as getShieldedPoolConfig — pick the right facilitator
+  // based on network so the read hits the route that actually exists in prod.
+  const base = shieldedFacilitatorBaseFor(network);
+  return mgmtReq<ShieldedLinkStatus>(
+    config,
+    serviceKey,
+    "GET",
+    `${base}/shielded-links/${encodeURIComponent(linkId)}?network=${encodeURIComponent(network)}`,
+  );
+}
+
+export function getShieldedAspStatus(config: RelaiPluginConfig, serviceKey: string) {
+  // ASP status lives on the EVM facilitator (it's network-agnostic — one ASP
+  // per pool family — and the v1 proxy for `asp/status` falls through to
+  // requireAuth in prod).
+  return mgmtReq<ShieldedAspStatus>(
+    config,
+    serviceKey,
+    "GET",
+    `/facilitator/payment-codes/shielded-links/asp/status`,
+  );
+}

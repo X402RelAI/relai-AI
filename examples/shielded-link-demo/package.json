@@ -1,0 +1,25 @@
+{
+  "name": "@relai-fi/shielded-link-demo",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Two Claude-driven agents negotiate a private USDC payment over a RelAI shielded link on solana-devnet. Each agent loads its own Claude Skill (.claude/skills/relai-shielded-{send,receive}) at startup and operates against the live RelAI Management API + Solana network. No simulation, no plugin coupling — standalone.",
+  "scripts": {
+    "demo": "tsx start-demo.mjs",
+    "buyer": "tsx agent-buyer.mjs",
+    "seller": "tsx agent-seller.mjs",
+    "bus": "tsx shared/chat-bus.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.0",
+    "@solana/spl-token": "^0.4.9",
+    "@solana/web3.js": "^1.98.4",
+    "bs58": "^6.0.0",
+    "circomlibjs": "^0.1.7",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.16.0",
+    "snarkjs": "^0.7.5",
+    "tsx": "^4.19.2"
+  }
+}
