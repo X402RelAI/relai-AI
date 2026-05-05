@@ -877,13 +877,18 @@ export function postSprSolanaRedeemRelay(
      * same field element via `pubkey_mod_bn254_p`.
      */
     seller: string;
+    /**
+     * Atomic amount the seller is claiming. Must match what the caller
+     * pulled from `/redeem-proof-input` — the server compares against the
+     * on-chain match record and rejects mismatches.
+     */
+    claimedAmountAtomic: string;
   },
 ) {
-  // Server-side request shape per server/spr-agent reference:
-  // `{ network, proofBase64, recipientHex, recipientPubkey, quoteNullifierHex,
-  // claimedAmountAtomic }`. We construct it from the caller's
-  // (sellerProofBase64, sellerPublicSignals, seller) shape and the proof
-  // input the caller already pulled.
+  // Server-side request shape: `{ network, proofBase64, recipientHex,
+  // recipientPubkey, quoteNullifierHex, claimedAmountAtomic }`. We
+  // construct it from the caller's (sellerProofBase64, sellerPublicSignals,
+  // seller, claimedAmountAtomic) shape.
   const [quoteNullifierHex, recipientHex] = body.sellerPublicSignals;
   return mgmtReq<SprRedeemRelayResult>(
     config,
@@ -896,11 +901,7 @@ export function postSprSolanaRedeemRelay(
       recipientHex,
       recipientPubkey: body.seller,
       quoteNullifierHex,
-      // claimedAmountAtomic must match what the seller pulled from
-      // /redeem-proof-input. The plugin caller (relai_spr_redeem) passes
-      // it via the `claimedAmountAtomic` field; we trust whatever the
-      // proof input returned.
-      claimedAmountAtomic: (body as unknown as { claimedAmountAtomic?: string }).claimedAmountAtomic ?? "0",
+      claimedAmountAtomic: body.claimedAmountAtomic,
     },
   );
 }

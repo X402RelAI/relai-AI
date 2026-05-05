@@ -215,18 +215,15 @@ export async function redeemSprQuote(input: SprRedeemInput): Promise<SprRedeemRe
   const quoteNullifierHex = `0x${Buffer.from(bigIntToBe32(BigInt(sigArr[0]))).toString("hex")}`;
   const recipientHex = `0x${Buffer.from(bigIntToBe32(BigInt(sigArr[1]))).toString("hex")}`;
 
-  // The server expects `claimedAmountAtomic` alongside the proof — we
-  // pull it verbatim from the redeem proof input the seller just fetched.
+  // claimedAmountAtomic comes verbatim from the redeem proof input — the
+  // server compares it to the on-chain match record and rejects mismatches.
   const relay = await postSprSolanaRedeemRelay(input.config, input.quoteId, {
     network,
     seller: input.recipientStealthPubkey,
     sellerProofBase64: proofBase64,
     sellerPublicSignals: [quoteNullifierHex, recipientHex],
-    // claimedAmountAtomic is forwarded by management.ts via a side-band
-    // field in the body — TypeScript won't let us type it cleanly because
-    // the union shape is asymmetric, so cast the additional key in here.
-    ...({ claimedAmountAtomic: String(proofInput.amount) } as object),
-  } as Parameters<typeof postSprSolanaRedeemRelay>[2]);
+    claimedAmountAtomic: String(proofInput.amount),
+  });
 
   if (!relay.ok) {
     throw new Error(

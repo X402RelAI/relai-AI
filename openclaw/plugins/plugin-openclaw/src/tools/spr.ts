@@ -137,7 +137,7 @@ export function createSprCancelTool(config: RelaiPluginConfig) {
   return {
     name: "relai_spr_cancel",
     description:
-      "Cancel an issued SPR quote that has NOT been matched yet. Reverts with 409 once a buyer has paired. Service-key-authed.",
+      "Cancel an issued SPR quote that has NOT been matched yet. Returns 409 once a buyer has paired. Service-key-authed.",
     parameters: Type.Object({ quoteId: Type.String() }),
 
     async execute(_id: string, params: Record<string, unknown>, ctx: ToolCtx) {
