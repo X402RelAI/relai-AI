@@ -1,6 +1,6 @@
 # @relai-fi/plugin-openclaw
 
-OpenClaw plugin for the [RelAI](https://relai.fi) marketplace. Browse, discover, and call paid APIs with automatic x402 micropayments — supporting both EVM and Solana chains.
+OpenClaw plugin (v0.4.0) for the [RelAI](https://relai.fi) marketplace. Browse, discover, and call paid APIs with automatic x402 micropayments (EVM + Solana), publish and monitor your own monetised APIs, quote the USDC bridge (Solana ↔ SKALE-Base), redeem **shielded payment links** seller-side without holding gas, and run the full **Shielded Payment Request (SPR)** seller flow with on-chain 95/5 fee split (testnet only).
 
 ## Installation
 
@@ -39,57 +39,58 @@ All config fields are optional and have sensible defaults.
 
 ## Tools
 
-The plugin registers 4 tools:
+The plugin registers **29 tools** grouped by domain. Tool wiring lives in [`src/tools/index.ts`](./src/tools/index.ts); JSON schemas are colocated with each `create*Tool` factory.
 
-### `relai_setup`
+### Setup (1)
 
-Set up an agent key for this agent. Generates a local EVM pairing keypair, opens a consent URL in the browser, and polls for approval automatically. The resulting service key is chain-agnostic — it works on all chains RelAI supports.
+| Tool | What it does |
+|---|---|
+| `relai_setup` | Generate a local EVM pairing keypair, open the consent URL, poll until approved, sign the retrieve nonce (EIP-191), persist the service key in `~/.openclaw/relai/agent-keys.json` (0600). One-shot per agent; the issued key is chain-agnostic. |
 
-```
-> Set up my RelAI agent key
-```
+### Marketplace — consume paid APIs (3)
 
-Parameters:
-- `agentName` — Human-readable name shown in consent UI
-- `contractAddress` — ERC-721 agent NFT contract address (optional)
-- `nftTokenId` — Agent NFT token ID (optional)
-- `network` — Network name, e.g. `"skale-base"` (optional)
+| Tool | What it does |
+|---|---|
+| `relai_discover` | List available APIs (optional `network` filter). |
+| `relai_api_info` | Get an API record + endpoint pricing by `apiId`. |
+| `relai_call` | Call a paid endpoint. Routes to `https://{subdomain}.x402.fi{path}` when set, falls back to `{baseUrl}/relay/{apiId}{path}` on 5xx/transport errors. Sends `X-Service-Key` + `X-Agent-ID` automatically. |
 
-### `relai_discover`
+### Management — publish + monitor your own APIs (10)
 
-List available paid APIs on the RelAI marketplace.
+`relai_mgmt_create_api`, `relai_mgmt_list_apis`, `relai_mgmt_get_api`, `relai_mgmt_update_api`, `relai_mgmt_delete_api`, `relai_mgmt_get_pricing`, `relai_mgmt_set_pricing` (per-endpoint USDC pricing), `relai_mgmt_stats`, `relai_mgmt_payments`, `relai_mgmt_logs`.
 
-```
-> What APIs are available on RelAI?
-```
+### Bridge (2)
 
-Parameters:
-- `network` — Filter by supported network (optional)
+`relai_bridge_quote`, `relai_bridge_balances`. Public, no auth — quotes for moving USDC between Solana and SKALE-Base, plus per-chain liquidity snapshots.
 
-### `relai_api_info`
+### Shielded payment links (4) — privacy pool, buyer-initiated
 
-Get details and endpoint pricing for a specific API.
+| Tool | What it does |
+|---|---|
+| `relai_shielded_config` | Read pool + ASP config for the active network. |
+| `relai_shielded_status` | Status of a specific shielded link. |
+| `relai_shielded_asp_status` | ASP scheduler snapshot. |
+| `relai_shielded_redeem` | Seller-side redeem: parse payload → fetch `proof-input` → Poseidon nullifier → `snarkjs.groth16.fullProve` → `execute-withdraw`. The pool relayer signs and pays gas — the seller never holds SOL. |
 
-```
-> Show me the endpoints and pricing for the nshield API
-```
+> Buyer-side `create + fund + emit` is **not** in the plugin (requires a Solana keypair to sign `deposit_note` on-chain, which conflicts with the "no private keys in tool params" convention). Use the `relai-shielded-send` Claude skill or the [shielded-link-demo](../../../examples/shielded-link-demo/).
 
-Parameters:
-- `apiId` — API identifier (e.g. `"nshield"`)
+### Shielded Payment Requests (SPR) — privacy pool, seller-initiated, on-chain 95/5 split (9)
 
-### `relai_call`
+Testnet only (`solana-devnet` / `base-sepolia` / `skale-base-sepolia`). Mainnet ships after a multi-party trusted-setup ceremony for the redeem zkey.
 
-Call a paid API endpoint. Payment is handled automatically via the service key.
+| Tool | What it does |
+|---|---|
+| `relai_spr_issue` | Mint a `relai:quote:<base64url>` bearer payload (draft → issue). Seller-side, service-key-authed. |
+| `relai_spr_cancel` | Cancel an unpaired quote you issued. |
+| `relai_spr_list` | List quotes you issued (with status filter). |
+| `relai_spr_get` | Get one quote by id. |
+| `relai_spr_status` | Match status (`pending` / `paid` / `expired`). |
+| `relai_spr_redeem` | Seller-side redeem after pairing: `proof-input` → Groth16 → `solana-redeem-relay`. Operator atomically transfers 95% to the seller pubkey + 5% to itself in `payout_to_seller`. Seller pays no gas. |
+| `relai_spr_seller_receipt` | Opaque seller-side receipt by quote id. |
+| `relai_spr_buyer_receipt` | Opaque buyer-side receipt (public). |
+| `relai_spr_decode` | Decode a `relai:quote:…` payload locally without hitting the network. |
 
-```
-> Call the nshield API endpoint /v1/health
-```
-
-Parameters:
-- `apiId` — API identifier
-- `endpointPath` — Endpoint path (e.g. `"/v1/health"`)
-- `method` — HTTP method (default: `GET`)
-- `body` — JSON request body for POST/PUT requests (optional)
+> Buyer-side `pay` (deposit + Groth16 pairing proof) is **not** in the plugin (same Solana-keypair convention as buyer-side shielded-link). Use the `relai-spr-pay` Claude skill or the [spr-demo](../../../examples/spr-demo/).
 
 ## Example prompts
 
@@ -134,11 +135,17 @@ The agent will generate a keypair and return a consent link. Open it in your bro
 
 ## How it works
 
-1. **Setup** — `relai_setup` generates a local keypair and initiates a consent flow with the RelAI platform. The user approves in their browser, and a service key is issued and stored locally in `~/.openclaw/relai/agent-keys.json`.
+1. **Setup** — `relai_setup` generates a local EVM pairing keypair and starts the consent flow. The user approves in their browser, the plugin signs the retrieve nonce (EIP-191), and the issued service key is persisted in `~/.openclaw/relai/agent-keys.json` (0600). The pairing key is only used once; the service key is chain-agnostic.
 
-2. **Discovery** — `relai_discover` and `relai_api_info` query the RelAI marketplace to find APIs and their pricing.
+2. **Discovery** — `relai_discover` + `relai_api_info` query the RelAI marketplace catalog.
 
-3. **Calling** — `relai_call` proxies requests through the RelAI relay with automatic x402 payment using the stored service key. The service key works across all chains.
+3. **Metered calls** — `relai_call` routes paid requests through `{subdomain}.x402.fi` when set (with relay fallback on 5xx) and sends `X-Service-Key` + `X-Agent-ID` automatically.
+
+4. **Provider tools** — the `relai_mgmt_*` family wraps the Management API for publishing endpoints, setting per-endpoint USDC pricing, and pulling stats / payments / logs.
+
+5. **Shielded payment links** — `relai_shielded_redeem` parses the `relai:shielded:…` payload, fetches the proof input, computes the Poseidon nullifier, runs Groth16 locally (`snarkjs.groth16.fullProve` against the V4 BN254 circuit), and posts to `execute-withdraw`. The pool relayer signs the on-chain withdraw — sellers never hold gas.
+
+6. **Shielded Payment Requests (SPR)** — `relai_spr_issue` mints a `relai:quote:<base64url>` bearer payload, the buyer pays anonymously through Privacy Pool V4.1 (out-of-plugin), and `relai_spr_redeem` finishes the seller side: `proof-input` → local Groth16 → `solana-redeem-relay`. The operator broadcasts `payout_to_seller`, splitting 95% to the seller and 5% to itself atomically on-chain.
 
 ## Data storage
 

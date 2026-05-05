@@ -24,6 +24,17 @@ import {
   createShieldedAspStatusTool,
   createShieldedRedeemTool,
 } from "./shielded.js";
+import {
+  createSprIssueTool,
+  createSprCancelTool,
+  createSprListTool,
+  createSprGetTool,
+  createSprStatusTool,
+  createSprRedeemTool,
+  createSprSellerReceiptTool,
+  createSprBuyerReceiptTool,
+  createSprDecodeTool,
+} from "./spr.js";
 
 /**
  * Build the full set of tools exposed by the RelAI marketplace plugin.
@@ -67,5 +78,21 @@ export function buildTools(config: RelaiPluginConfig) {
     createShieldedStatusTool(config),
     createShieldedAspStatusTool(config),
     createShieldedRedeemTool(config),
+
+    // Shielded Payment Requests (SPR) — testnet only.
+    // - Seller-initiated quotes paid by buyers anonymously through Privacy
+    //   Pool V4.1. Two ZK proofs total (buyer pairing + seller redeem).
+    // - Buyer-side pair (deposit + Groth16 pairing proof) stays out of the
+    //   plugin: it requires a Solana keypair and on-chain signing, same
+    //   convention as buyer-side shielded-link create.
+    createSprIssueTool(config),
+    createSprCancelTool(config),
+    createSprListTool(config),
+    createSprGetTool(config),
+    createSprStatusTool(config),
+    createSprRedeemTool(config),
+    createSprSellerReceiptTool(config),
+    createSprBuyerReceiptTool(config),
+    createSprDecodeTool(config),
   ];
 }

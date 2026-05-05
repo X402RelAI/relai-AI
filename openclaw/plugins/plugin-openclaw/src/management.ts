@@ -486,3 +486,447 @@ export function getShieldedAspStatus(config: RelaiPluginConfig, serviceKey: stri
     `/facilitator/payment-codes/shielded-links/asp/status`,
   );
 }
+
+// ============================================================================
+// Shielded Payment Requests (SPR) — reverse-direction shielded payments.
+//
+// Direction is opposite to shielded links: the SELLER issues an opaque quote,
+// the BUYER deposits into Privacy Pool V4.1 with a Groth16 pairing proof, and
+// the seller redeems with a separate Groth16 redeem proof. Two ZK proofs total
+// instead of one.
+//
+// Testnet only at this stage: `base-sepolia`, `skale-base-sepolia`,
+// `solana-devnet`. Mainnet blocked on a multi-party trusted-setup ceremony +
+// amount-binding redeem circuit.
+//
+// Service-key-authed routes are owner-only (the issuing seller). Public
+// witness/relay/match-status routes need no auth — opaque IDs act as bearer.
+// ============================================================================
+
+export type SprNetwork = "base-sepolia" | "skale-base-sepolia" | "solana-devnet";
+
+export type SprStatus =
+  | "draft"
+  | "issued"
+  | "matched"
+  | "paid"
+  | "redeemed"
+  | "expired"
+  | "cancelled"
+  | "refunded";
+
+export interface SprQuote {
+  quoteId: string;
+  status: SprStatus;
+  commitment?: string;
+  nullifier?: string;
+  amount: string;
+  expiry: number;
+  network: SprNetwork;
+  poolId?: string;
+  description?: string | null;
+  /** Bearer token returned ONLY by the /issue endpoint (and by /list for the owner). */
+  payload?: string;
+  sellerReceiptId?: string;
+  sellerEncPk?: string;
+  solanaRedeemTx?: string;
+  [extra: string]: unknown;
+}
+
+export interface SprMatch {
+  quoteRoot: string;
+  poolRoot: string;
+  aspRoot: string;
+  paymentNullifier: string;
+  submitter: string;
+  matchedAt: number;
+}
+
+export interface SprPairingAttestation {
+  proofBase64: string;
+  publicSignals: string[];
+  recordedAt: string;
+}
+
+export interface SprMatchStatus {
+  quoteId: string;
+  status: SprStatus | "pending" | "unknown";
+  network: SprNetwork;
+  commitment?: string;
+  quoteNullifier?: string;
+  expiry?: number;
+  match?: SprMatch;
+  registryAddress?: string;
+  pairingAttestation?: SprPairingAttestation; // Solana only
+  sellerEncPk?: string;
+  [extra: string]: unknown;
+}
+
+export interface SprRedeemProofInput {
+  quoteId: string;
+  network: SprNetwork;
+  amount: string;
+  poolId: string;
+  /** Hex-encoded note material from the quote payload — feed to circuit, then discard. */
+  sellerSecret: string;
+  nonce: string;
+  commitment: string;
+  quoteNullifier: string;
+  match: SprMatch;
+  registryAddress: string;
+  circuitArtifacts?: { wasmUrl?: string; zkeyUrl?: string };
+  [extra: string]: unknown;
+}
+
+export interface SprQuoteWitness {
+  commitment: string;
+  quoteRoot: string;
+  leafIndex: number;
+  leafCount: number;
+  depth: number;
+  pathElements: string[];
+  pathIndices: number[];
+  snapshot?: { rootHex?: string; publishedAt?: string; [k: string]: unknown };
+}
+
+export interface SprPoolWitness {
+  pool: {
+    root: string;
+    depth: number;
+    leafIndex?: number;
+    pathElements: string[];
+    pathIndices: number[];
+  };
+  asp: {
+    root: string;
+    depth: number;
+    leafIndex: number;
+    leafCount: number;
+    pathElements: string[];
+    pathIndices: number[];
+    publishedAt?: string;
+  };
+  aspBlockedReason?: string | null;
+  aspReady?: boolean;
+}
+
+export interface SprSellerReceipt {
+  receiptId: string;
+  quoteId: string;
+  status: SprStatus | string;
+  redeemTxHash?: string;
+  network: SprNetwork;
+  [extra: string]: unknown;
+}
+
+export interface SprBuyerReceipt {
+  receiptId: string;
+  quoteId: string;
+  status: SprStatus | string;
+  matchTxHash?: string;
+  depositTxHash?: string;
+  network: SprNetwork;
+  [extra: string]: unknown;
+}
+
+export interface SprPairingRelayResult {
+  ok: boolean;
+  signature?: string;
+  alreadyRelayed?: boolean;
+  matchedAt?: number;
+}
+
+export interface SprRedeemRelayResult {
+  ok: boolean;
+  signature?: string;
+  paidOut: string;
+  operatorFee: string;
+  /** Operator pubkey that signed payout_to_seller. */
+  relayer?: string;
+  alreadyRedeemed?: boolean;
+}
+
+export interface SprStealthClaimResult {
+  ok: boolean;
+  signature?: string;
+}
+
+// ---- Owner-authenticated (service key) -------------------------------------
+
+export function createSprQuote(
+  config: RelaiPluginConfig,
+  serviceKey: string,
+  input: {
+    amount: string;
+    expiry: number;
+    network: SprNetwork;
+    description?: string;
+    poolId?: string;
+    sellerEncPk?: string;
+  },
+) {
+  return mgmtReq<SprQuote>(config, serviceKey, "POST", "/v1/shielded-payment-requests", input);
+}
+
+export function issueSprQuote(
+  config: RelaiPluginConfig,
+  serviceKey: string,
+  quoteId: string,
+  input: { sellerEncPk?: string } = {},
+) {
+  return mgmtReq<SprQuote>(
+    config,
+    serviceKey,
+    "POST",
+    `/v1/shielded-payment-requests/${encodeURIComponent(quoteId)}/issue`,
+    input,
+  );
+}
+
+export function cancelSprQuote(config: RelaiPluginConfig, serviceKey: string, quoteId: string) {
+  return mgmtReq<{ success: boolean; quoteId: string }>(
+    config,
+    serviceKey,
+    "POST",
+    `/v1/shielded-payment-requests/${encodeURIComponent(quoteId)}/cancel`,
+    {},
+  );
+}
+
+export async function listSprQuotes(
+  config: RelaiPluginConfig,
+  serviceKey: string,
+  options: { status?: SprStatus } = {},
+): Promise<SprQuote[]> {
+  const qs = options.status ? `?status=${encodeURIComponent(options.status)}` : "";
+  const data = await mgmtReq<{ quotes: SprQuote[] }>(
+    config,
+    serviceKey,
+    "GET",
+    `/v1/shielded-payment-requests${qs}`,
+  );
+  return data.quotes;
+}
+
+export function getSprQuote(config: RelaiPluginConfig, serviceKey: string, quoteId: string) {
+  return mgmtReq<SprQuote>(
+    config,
+    serviceKey,
+    "GET",
+    `/v1/shielded-payment-requests/${encodeURIComponent(quoteId)}`,
+  );
+}
+
+export function getSprRedeemProofInput(
+  config: RelaiPluginConfig,
+  serviceKey: string,
+  quoteId: string,
+) {
+  return mgmtReq<SprRedeemProofInput>(
+    config,
+    serviceKey,
+    "GET",
+    `/v1/shielded-payment-requests/${encodeURIComponent(quoteId)}/redeem-proof-input`,
+  );
+}
+
+// ---- Public reads (opaque-ID bearer) ---------------------------------------
+
+export function getSprSellerReceipt(config: RelaiPluginConfig, receiptId: string) {
+  return mgmtReq<SprSellerReceipt>(
+    config,
+    null,
+    "GET",
+    `/v1/shielded-payment-requests/receipt/seller/${encodeURIComponent(receiptId)}`,
+  );
+}
+
+export function getSprBuyerReceipt(config: RelaiPluginConfig, receiptId: string) {
+  return mgmtReq<SprBuyerReceipt>(
+    config,
+    null,
+    "GET",
+    `/v1/shielded-payment-requests/receipt/buyer/${encodeURIComponent(receiptId)}`,
+  );
+}
+
+export function getSprQuoteWitness(config: RelaiPluginConfig, quoteId: string) {
+  return mgmtReq<SprQuoteWitness>(
+    config,
+    null,
+    "GET",
+    `/facilitator/shielded-payment-requests/${encodeURIComponent(quoteId)}/quote-witness`,
+  );
+}
+
+export function getSprPoolWitness(
+  config: RelaiPluginConfig,
+  options: {
+    network: SprNetwork;
+    commitment: string;
+    leafIndex: number;
+    depositor: string;
+  },
+) {
+  const params = new URLSearchParams({
+    network: options.network,
+    commitment: options.commitment,
+    leafIndex: String(options.leafIndex),
+    depositor: options.depositor,
+  });
+  return mgmtReq<SprPoolWitness>(
+    config,
+    null,
+    "GET",
+    `/facilitator/shielded-payment-requests/pool-witness?${params}`,
+  );
+}
+
+export function getSprMatchStatus(config: RelaiPluginConfig, quoteId: string) {
+  return mgmtReq<SprMatchStatus>(
+    config,
+    null,
+    "GET",
+    `/facilitator/shielded-payment-requests/${encodeURIComponent(quoteId)}/match-status`,
+  );
+}
+
+// ---- Solana-specific (public, operator-relayed) ----------------------------
+
+export function getSprSolanaPoolWitness(
+  config: RelaiPluginConfig,
+  commitment: string,
+  network: SprNetwork = "solana-devnet",
+) {
+  return mgmtReq<SprPoolWitness["pool"] & { leafIndex?: number }>(
+    config,
+    null,
+    "GET",
+    `/v1/shielded-payment-requests/solana-pool-witness/${encodeURIComponent(commitment)}?network=${encodeURIComponent(network)}`,
+  );
+}
+
+export function getSprSolanaAspWitness(
+  config: RelaiPluginConfig,
+  commitment: string,
+  network: SprNetwork = "solana-devnet",
+) {
+  return mgmtReq<SprPoolWitness["asp"]>(
+    config,
+    null,
+    "GET",
+    `/v1/shielded-payment-requests/solana-asp-witness/${encodeURIComponent(commitment)}?network=${encodeURIComponent(network)}`,
+  );
+}
+
+export function postSprSolanaDepositConfirmed(
+  config: RelaiPluginConfig,
+  quoteId: string,
+  body: { commitment: string; depositTxHash: string; depositPda: string },
+) {
+  return mgmtReq<{ success: boolean; quoteId: string }>(
+    config,
+    null,
+    "POST",
+    `/v1/shielded-payment-requests/${encodeURIComponent(quoteId)}/solana-deposit-confirmed`,
+    body,
+  );
+}
+
+export function postSprSolanaPairingRelay(
+  config: RelaiPluginConfig,
+  quoteId: string,
+  body: { network: SprNetwork; proofBase64: string; publicSignals: string[] },
+) {
+  return mgmtReq<SprPairingRelayResult>(
+    config,
+    null,
+    "POST",
+    `/v1/shielded-payment-requests/${encodeURIComponent(quoteId)}/solana-pairing-relay`,
+    body,
+  );
+}
+
+export function postSprSolanaPairingProof(
+  config: RelaiPluginConfig,
+  quoteId: string,
+  body: { proofBase64: string; publicSignals: string[]; txHash?: string },
+) {
+  return mgmtReq<{ ok: boolean }>(
+    config,
+    null,
+    "POST",
+    `/v1/shielded-payment-requests/${encodeURIComponent(quoteId)}/solana-pairing-proof`,
+    body,
+  );
+}
+
+export function postSprSolanaRedeemRelay(
+  config: RelaiPluginConfig,
+  quoteId: string,
+  body: {
+    network: SprNetwork;
+    /** 256-byte Groth16 proof, base64 — serialised by snarkjs.exportSolidityCallData. */
+    sellerProofBase64: string;
+    /** Two public signals: [quoteNullifier, recipient], 0x-prefixed 32-byte hex each. */
+    sellerPublicSignals: string[];
+    /**
+     * Public Solana pubkey of the per-quote stealth recipient (base58).
+     * Server uses this for the on-chain `payout_to_seller` recipient
+     * account; the proof's `recipient` public signal must reduce to the
+     * same field element via `pubkey_mod_bn254_p`.
+     */
+    seller: string;
+  },
+) {
+  // Server-side request shape per server/spr-agent reference:
+  // `{ network, proofBase64, recipientHex, recipientPubkey, quoteNullifierHex,
+  // claimedAmountAtomic }`. We construct it from the caller's
+  // (sellerProofBase64, sellerPublicSignals, seller) shape and the proof
+  // input the caller already pulled.
+  const [quoteNullifierHex, recipientHex] = body.sellerPublicSignals;
+  return mgmtReq<SprRedeemRelayResult>(
+    config,
+    null,
+    "POST",
+    `/v1/shielded-payment-requests/${encodeURIComponent(quoteId)}/solana-redeem-relay`,
+    {
+      network: body.network,
+      proofBase64: body.sellerProofBase64,
+      recipientHex,
+      recipientPubkey: body.seller,
+      quoteNullifierHex,
+      // claimedAmountAtomic must match what the seller pulled from
+      // /redeem-proof-input. The plugin caller (relai_spr_redeem) passes
+      // it via the `claimedAmountAtomic` field; we trust whatever the
+      // proof input returned.
+      claimedAmountAtomic: (body as unknown as { claimedAmountAtomic?: string }).claimedAmountAtomic ?? "0",
+    },
+  );
+}
+
+export function postSprSolanaStealthClaimRelay(
+  config: RelaiPluginConfig,
+  body: { network: SprNetwork; txBase64: string; expectedAuthority: string },
+) {
+  return mgmtReq<SprStealthClaimResult>(
+    config,
+    null,
+    "POST",
+    `/v1/shielded-payment-requests/solana-stealth-claim-relay`,
+    body,
+  );
+}
+
+export function postSprSolanaFaucet(
+  config: RelaiPluginConfig,
+  body: { network: SprNetwork; recipientAta: string; amount: number },
+) {
+  return mgmtReq<{ success: boolean; txSignature: string; fundedAmount: string }>(
+    config,
+    null,
+    "POST",
+    `/v1/shielded-payment-requests/solana-spr-faucet`,
+    body,
+  );
+}
