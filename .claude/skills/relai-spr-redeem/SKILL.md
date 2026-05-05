@@ -44,11 +44,9 @@ Step 5 cannot be done with HTTP alone — see "Delegation".
 
 ## Delegation — running the off-platform proof step
 
-For step 5, choose one (in preference order):
+Step 5 cannot be done with HTTP alone. The agent needs a host runtime with `snarkjs` + `circomlibjs` + `bs58` (+ `tweetnacl` if the seller wants to verify the buyer's pairing attestation). Run the proof inline; exact request/response shapes, circuit-input layout, public-signal order, and the G2 swap convention for Solana are in [references/redeem-protocol.md](references/redeem-protocol.md).
 
-1. **openclaw plugin (`relai_spr_redeem`)** — if the agent has access to `plugin-openclaw`, the entire seller redeem flow (proof-input → Groth16 → relay) is a single tool call. The plugin uses the same service key this skill resolves. **This is the recommended path** when openclaw is available.
-2. **Code-execution sandbox** — if the agent has Bash + Node available with `snarkjs`, `circomlibjs`, `bs58`, `tweetnacl`, the steps can be run inline. Detailed protocol in [references/redeem-protocol.md](references/redeem-protocol.md).
-3. **Reference Node client** — the [`examples/spr-demo`](../../../examples/spr-demo/) bundled in this repo ships a working `redeemSprQuote(...)` helper. Run it locally with the quoteId + service key + Solana receive pubkey.
+The seller's wallet keypair is also needed locally to derive the per-quote stealth recipient — the proof's `recipient` public signal is a BN254-reduced 32-byte pubkey, and the on-chain `payout_to_seller` deposits 95% of the face value into that stealth account's USDC ATA. A second `solana-stealth-claim-relay` hop (operator-signed `feePayer`, stealth keypair partial-signs `transferChecked`) moves it to the seller's main wallet ATA. Keep both keypairs out of any LLM tool param.
 
 ## Pre-flight
 

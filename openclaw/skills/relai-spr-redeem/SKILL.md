@@ -35,23 +35,25 @@ Call `relai_spr_status` with `quoteId`. Three outcomes:
 
 Read `amount` from `relai_spr_status` and confirm with the user. Once redeemed, the amount is final — there's no partial redeem.
 
-### 4. Resolve the receive address
+### 4. Derive the per-quote stealth pubkey (off-platform)
 
-Order of resolution:
+The plugin tool's `recipientStealthPubkey` parameter is **not** the seller's main wallet. It's a per-quote stealth pubkey derived from `sha256(walletKeypair.signMessage("relai-spr-stealth-seller:v1:<quoteId>"))` → `Keypair.fromSeed`. Because the plugin convention forbids private keys in tool params, the caller must do this derivation in its own process and pass only the resulting base58 pubkey.
 
-1. The address the user explicitly typed in this conversation.
-2. Otherwise ask the user. **Do NOT default** to anything — always confirm.
+Source the stealth pubkey from one of:
 
-The address is public information. Surfacing it back to the user is fine; never echo it over the chat channel where the buyer can see it (see Guardrails).
+1. A separate openclaw tool / shell helper that has the seller wallet keypair available.
+2. The reference helper at `examples/spr-demo/lib/redeem-spr.mjs` (also derives + drives the second-step claim hop).
+
+The 95% lands in the stealth ATA — to move it to the seller's main wallet, run the second-step `solana-stealth-claim-relay` (not wrapped by the plugin) with the stealth keypair partial-signing.
 
 ### 5. Redeem
 
 Call `relai_spr_redeem` with:
 
 - `quoteId` — the same one you issued / inspected.
-- `sellerPubkey` — the receive address from step 4.
+- `recipientStealthPubkey` — the base58 stealth pubkey from step 4.
 
-The tool returns `{quoteId, status, recipient, paidOutMicro, operatorFeeMicro, payoutExplorerUrl}`. `status: redeemed` confirms the on-chain payout. Operator collected `operatorFeeMicro` (5%); seller received `paidOutMicro` (95%).
+The tool returns `{quoteId, status, recipientStealthPubkey, paidOutMicro, operatorFeeMicro, payoutExplorerUrl, recipientHex, quoteNullifierHex, alreadyRedeemed}`. `status: redeemed` confirms the on-chain payout. Operator collected `operatorFeeMicro` (5%); seller received `paidOutMicro` (95%) into the stealth ATA.
 
 ### 6. Verify and acknowledge
 
@@ -72,7 +74,7 @@ Read `payoutExplorerUrl` once locally to confirm. If the user wants a confirmati
 | `not_configured` | Run `relai_setup`. |
 | `409 match not yet recorded` | Buyer hasn't paired. Poll `relai_spr_status` first; only call redeem when `status >= paid`. |
 | `409 already redeemed` | Quote was drained. Stop. |
-| `400 invalid_proof` | Most often: wrong recipient encoding. Re-verify `sellerPubkey` and don't auto-retry. |
+| `400 invalid_proof` | Most often: wrong recipient encoding (must reduce from base58 stealth pubkey via `pubkey_mod_bn254_p`). Re-verify `recipientStealthPubkey` and don't auto-retry. |
 | `429 rate_limited` | Stop. Verify quoteId hasn't been brute-forced. |
 | `500 zkey_artifact_unavailable` | Backend's CDN dropped the wasm/zkey. Retry once, escalate if persistent. |
 

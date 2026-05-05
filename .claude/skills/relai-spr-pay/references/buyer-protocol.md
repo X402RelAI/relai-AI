@@ -2,8 +2,6 @@
 
 Exact request/response shapes and the cryptography for SPR pairing on Solana. The HTTP steps work with any HTTP client; the cryptography needs a Groth16/snarkjs-compatible runtime.
 
-The reference Node implementation is `examples/spr-demo/lib/pay-spr.mjs` (vendored from `402-everywhere/examples/spr-agent/src/pay-spr.mjs`). What follows are the shapes that helper assembles.
-
 ## Decode the payload
 
 The payload short keys are: `v` (version), `q` (quoteId), `p` (poolId), `a` (amount), `s` (sellerSecret), `n` (nonce), `e` (expiry), `d` (description), `w` (network), `k` (sellerEncPk). NO commitment or nullifier — recompute them locally if you need them.
@@ -47,7 +45,7 @@ const buyerNote = {
 };
 ```
 
-**Persist `secret`/`blinding`/`nonce` BEFORE depositing** — losing them locks the funds. The reference implementation in `examples/spr-demo/lib/pay-spr.mjs` returns them in `result.buyerNote` so the caller can serialise them to disk.
+**Persist `secret`/`blinding`/`nonce` BEFORE depositing** — losing them locks the funds. Serialise them to disk with the `quoteId` as key before broadcasting the deposit.
 
 ## Compute the buyer's pool commitment
 
@@ -126,7 +124,7 @@ If the ASP witness response includes `aspBlockedReason`, sleep 12s and retry.
 
 ## Generate the pairing proof
 
-Authoritative public-signal order — circuit outputs in declaration order, NO public inputs (taken verbatim from `402-everywhere/contracts/circuits/ShieldedPaymentPairing.circom`):
+Authoritative public-signal order — circuit outputs in declaration order, NO public inputs:
 
 ```
 [0] poolRoot

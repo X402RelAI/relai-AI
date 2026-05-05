@@ -58,13 +58,12 @@ Steps 1, 4, 5, 9 cannot be done with HTTP alone — see "Delegation".
 
 ## Delegation — running the off-platform steps
 
-For steps 1 + 4 + 5 + 9, choose one of:
+Steps 1 + 4 + 5 + 9 cannot be done with HTTP alone. The agent must hand them to a host runtime that has both a Solana keypair and the relevant crypto libraries (`@solana/web3.js`, `@solana/spl-token`, `circomlibjs`, `snarkjs`):
 
-1. **openclaw plugin** — `plugin-openclaw` ships `relai_spr_decode` (step 1) but **not** the buyer-side pair flow. Steps 4, 5, 9 still need an external executor. The plugin convention is "no private keys in tool params" — this matches the buyer-side shielded-link create skill, which delegates the on-chain step the same way.
-2. **Reference Node client** — the [`examples/spr-demo`](../../../examples/spr-demo/) bundled in this repo ships a working `payShieldedPaymentRequest()` helper (`lib/pair.ts`) plus a Solana deposit builder. Run it locally with the payload + service key + Solana keypair env. **This is the recommended path for the live agent demo.**
-3. **Dashboard UI** — when the seller-issued payload is shared with a human, the buyer can pay via the dashboard at `relai.fi/quotes/pay` (in-browser wallet flow). Direct the user there for one-off payments where no agent-side wallet is configured.
+1. **Code-execution sandbox** — if the agent has Bash + Node available with the libraries installed AND the user has explicitly authorised loading a Solana keypair for this run, run the steps inline. Exact request shapes, the Poseidon nullifier derivation, the SPL deposit-ix layout, and the public-signal order for the pairing circuit are in [references/buyer-protocol.md](references/buyer-protocol.md).
+2. **Dashboard UI** — when the seller-issued payload is shared with a human, the buyer can pay via the dashboard at `relai.fi/quotes/pay` (in-browser wallet flow). Direct the user there for one-off payments where no agent-side wallet is configured.
 
-If the user has a Node sandbox with `circomlibjs`, `snarkjs`, `@solana/web3.js`, `@solana/spl-token` installed AND has explicitly authorised passing a Solana keypair to the agent for this run, the technical details for steps 4 + 5 + 9 are in [references/buyer-protocol.md](references/buyer-protocol.md). **Do not** load a wallet keypair from env unprompted — always confirm with the user first.
+**Do not** load a wallet keypair from env unprompted — always confirm with the user first. A SKILL is a recipe, not a permission grant.
 
 ## Pre-flight before deposit
 

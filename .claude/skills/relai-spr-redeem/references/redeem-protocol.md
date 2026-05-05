@@ -1,6 +1,6 @@
 # Seller redeem protocol reference
 
-Exact request/response shapes and circuit input layout for the SPR redeem flow on Solana. Authoritative reference: `402-everywhere/contracts/circuits/ShieldedPaymentRedeem.circom` + `examples/spr-agent/src/redeem-prover.mjs` + `examples/spr-agent/src/redeem-flow.mjs`.
+Exact request/response shapes and circuit input layout for the SPR redeem flow on Solana.
 
 ## Poll match status
 
